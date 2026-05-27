@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # MongoDB 数据库
+  mongodb:
+    image: mongo:5.0
+    container_name: yxs-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - yxs-network
+
+  # Redis 缓存和消息队列
+  redis:
+    image: redis:7-alpine
+    container_name: yxs-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - yxs-network
+
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yxs-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_URL=mongodb://admin:admin123@mongodb:27017
+      - REDIS_URL=redis://redis:6379/0
+      - BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./backend:/app/backend
+    networks:
+      - yxs-network
+    command: python backend/main.py
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  yxs-network:
+    driver: bridge

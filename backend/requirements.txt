@@ -1,0 +1,51 @@
+# Web框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# 数据库和缓存
+pymongo==4.6.0
+motor==3.3.2
+redis==5.0.1
+
+# 消息队列
+celery==5.3.4
+kombu==5.3.4
+
+# API客户端
+requests==2.31.0
+aiohttp==3.9.1
+httpx==0.25.2
+
+# GitHub Codex
+PyGithub==2.1.1
+
+# 微信集成
+wechatpy==1.8.18
+cryptography==41.0.7
+
+# 认证和安全
+PyJWT==2.8.1
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# 日志和监控
+python-json-logger==2.0.7
+loguru==0.7.2
+
+# 工具库
+python-dotenv==1.0.0
+pydantic-settings==2.1.0
+click==8.1.7
+
+# 开发工具
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.12.1
+flake8==6.1.0
+mypy==1.7.1
+
+# 其他
+pytz==2023.3
+python-dateutil==2.8.2
