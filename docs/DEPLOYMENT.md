@@ -80,6 +80,16 @@ curl -X POST http://localhost:8000/api/v1/agent/task \
   }'
 ```
 
+### 启动本地 Agent
+
+在另一个终端中启动本地 Agent，用于验证远程派发链路：
+
+```bash
+python client.py --server ws://localhost:8000/api/v1/agent/ws --key test-key --name local-dev-agent
+```
+
+本地 Agent 在线时，创建任务接口会优先返回 `queued`，后续由守护进程通过 WebSocket 回传状态与结果。
+
 ## 生产部署
 
 ### 1. 云服务器配置

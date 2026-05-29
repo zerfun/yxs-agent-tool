@@ -1,6 +1,6 @@
 # 研享数Agent工具 (YXS Agent Tool)
 
-一个跨端Agent工具，通过移动端（微信、飞书、QQ等）远程控制电脑端的AI Agent，支持GitHub Codex、Claude Code、Qwen Code等多个AI模型。
+一个跨端 Agent 工具，通过移动端（微信、飞书、QQ 等）远程控制电脑端的 AI Agent，支持 GitHub Codex、Claude、Qwen 等多种模型接入形态。
 
 ## 🎯 核心功能
 
@@ -15,26 +15,19 @@
 
 ```
 yxs-agent-tool/
-├── backend/                    # 电脑端代理服务
+├── backend/                    # 云端 API 与任务调度服务
 │   ├── src/
-│   │   ├── agent/             # Agent核心逻辑
+│   │   ├── api/               # HTTP / WebSocket 路由
+│   │   ├── config/            # 配置管理
+│   │   ├── daemon/            # 本地 Agent 守护进程与连接管理
 │   │   ├── models/            # 数据模型
 │   │   ├── services/          # 业务逻辑服务
-│   │   ├── api/               # API接口
-│   │   └── config/            # 配置管理
-│   ├── requirements.txt        # Python依赖
-│   └── main.py               # 主入口
+│   │   └── utils/             # 日志等工具
+│   ├── requirements.txt       # Python 依赖
+│   ├── main.py                # 服务入口
+│   └── tests/                 # 基础测试
 │
-├── frontend/                  # 移动端集成
-│   ├── wechat/               # 微信机器人
-│   ├── feishu/               # 飞书机器人
-│   └── qq/                   # QQ机器人
-│
-├── shared/                    # 共享模块
-│   ├── schemas/              # 数据架构
-│   ├── utils/                # 工具函数
-│   └── constants/            # 常量定义
-│
+├── client.py                  # 本地 Agent 启动脚本
 ├── docker-compose.yml         # 容器编排
 ├── .env.example              # 环境变量示例
 └── docs/                     # 文档
@@ -48,8 +41,8 @@ yxs-agent-tool/
 ### 前置要求
 - Python 3.8+
 - Docker & Docker Compose
-- GitHub Personal Access Token (for Codex)
-- 微信公众号/企业号
+- GitHub Token（可选，用于接入 GitHub 侧能力）
+- 微信公众号/企业号（如需微信回调）
 
 ### 安装
 
@@ -62,7 +55,7 @@ cd yxs-agent-tool
 2. **配置环境变量**
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入你的API密钥
+# 编辑 .env 文件，填入你的 API 密钥 / Agent 配置
 ```
 
 3. **启动服务**
@@ -72,16 +65,25 @@ docker-compose up -d
 
 # 方式2: 本地Python
 pip install -r backend/requirements.txt
-python backend/main.py
+cd backend
+python main.py
 ```
 
 ## 🔧 配置指南
 
-### GitHub Codex配置
+### GitHub Codex 配置
 ```bash
 # .env
 GITHUB_TOKEN=your_github_token_here
 CODEX_MODEL=code-davinci-002
+```
+
+### 本地 Agent 配置
+```bash
+# .env
+AGENT_API_KEYS=test-key,dev-key
+LOCAL_LLM_URL=http://localhost:11434/api/generate
+LOCAL_LLM_MODEL=llama2
 ```
 
 ### 微信公众号配置
@@ -91,6 +93,23 @@ WECHAT_APP_ID=your_app_id
 WECHAT_APP_SECRET=your_app_secret
 WECHAT_TOKEN=your_token
 ```
+
+## 🧪 当前可用能力
+
+- FastAPI 服务可正常启动
+- `POST /api/v1/agent/task` 支持创建任务
+- 有在线本地 Agent 时，任务优先远程派发
+- 没有在线 Agent 时，Codex 请求会本地兜底到演示模式
+- 微信回调路由与 Agent WebSocket 路由已接入主应用
+- 基础测试已覆盖本地执行和远程排队两条主路径
+
+## 🔌 启动本地 Agent
+
+```bash
+python client.py --server ws://localhost:8000/api/v1/agent/ws --key test-key --name my-agent
+```
+
+本地 Agent 连上后，`/api/v1/agent/task` 创建的任务会优先返回 `queued`，等待远程执行。
 
 ## 📚 使用示例
 
@@ -120,10 +139,11 @@ WECHAT_TOKEN=your_token
 
 ### Phase 1: MVP
 - [x] 项目框架
-- [ ] 微信基础集成
-- [ ] Codex API适配
-- [ ] 基础命令执行
-- [ ] 任务队列
+- [x] 微信基础回调接入
+- [x] 本地 / 远程任务分发骨架
+- [x] 本地 Agent WebSocket 通道
+- [ ] 真实模型 API 适配
+- [ ] 持久化任务队列
 
 ### Phase 2: 增强功能
 - [ ] 多AI模型支持

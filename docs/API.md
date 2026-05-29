@@ -84,8 +84,25 @@ Content-Type: application/json
 }
 ```
 
+当存在在线本地 Agent 且支持对应模型时，接口会优先将任务派发到远程执行节点，此时响应状态可能为：
+
+```json
+{
+  "code": 0,
+  "message": "Task created successfully",
+  "data": {
+    "task_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "queued",
+    "result": null,
+    "created_at": "2024-01-01T00:00:00",
+    "completed_at": null
+  }
+}
+```
+
 **状态值:**
 - `idle`: 待处理
+- `queued`: 已入队，等待本地 Agent 执行
 - `running`: 处理中
 - `completed`: 已完成
 - `failed`: 处理失败
@@ -115,6 +132,28 @@ GET /agent/task/{task_id}
     "completed_at": "2024-01-01T00:00:10"
   }
 }
+```
+
+## Agent WebSocket API
+
+### 本地 Agent 连接
+
+本地守护进程通过 WebSocket 接入云端服务：
+
+```http
+GET /agent/ws?agent_id=my-agent&api_key=test-key
+```
+
+### 查看在线 Agent
+
+```http
+GET /agent/agents
+```
+
+### 查询远程结果缓存
+
+```http
+GET /agent/task/{task_id}/result
 ```
 
 ## 微信API
