@@ -1,1 +1,191 @@
-\"\"\"GitHub Codex服务 - AI代码生成集成\"\"\"\n\nimport logging\nimport aiohttp\nfrom typing import Optional, Dict, Any\nfrom datetime import datetime\nimport asyncio\n\nfrom src.config.settings import settings\n\nlogger = logging.getLogger(__name__)\n\nclass CodexService:\n    \"\"\"Codex代码生成服务\"\"\"\n    \n    def __init__(self):\n        \"\"\"\n        初始化Codex服务\n        \n        注意：GitHub Codex已逐步迁移到Copilot Completions API\n        本服务可适配以下方案：\n        1. GitHub Copilot Completions API\n        2. OpenAI Codex API（现已停用，迁移到GPT-4）\n        3. 自定义LLM接口\n        \"\"\"\n        self.github_token = settings.GITHUB_TOKEN\n        self.api_base = \"https://api.github.com\"\n        self.model = settings.CODEX_MODEL\n        logger.info(\"CodexService initialized\")\n    \n    async def generate_code(self, prompt: str, language: str = \"python\", **kwargs) -> str:\n        \"\"\"\n        生成代码\n        \n        Args:\n            prompt: 代码生成的提示词\n            language: 编程语言 (python, javascript, java, cpp等)\n            **kwargs: 其他参数 (temperature, max_tokens等)\n        \n        Returns:\n            生成的代码字符串\n        \"\"\"\n        try:\n            # 方案1: 使用GitHub Copilot Chat API (推荐)\n            # 需要用户开启 Copilot API 访问权限\n            \n            temperature = kwargs.get('temperature', 0.5)\n            max_tokens = kwargs.get('max_tokens', 2048)\n            \n            # 增强提示词\n            enhanced_prompt = self._enhance_prompt(prompt, language)\n            \n            logger.info(f\"Generating code for: {prompt[:50]}...\")\n            \n            # 调用API\n            result = await self._call_copilot_api(enhanced_prompt, temperature, max_tokens)\n            \n            return result\n            \n        except Exception as e:\n            logger.error(f\"Failed to generate code: {e}\")\n            # 返回示例代码（演示模式）\n            return self._get_demo_code(prompt, language)\n    \n    async def explain_code(self, code: str, **kwargs) -> str:\n        \"\"\"\n        解释代码\n        \n        Args:\n            code: 需要解释的代码\n            **kwargs: 其他参数\n        \n        Returns:\n            代码解释\n        \"\"\"\n        prompt = f\"请解释以下代码：\\n\\n```\\n{code}\\n```\"\n        return await self.generate_code(prompt, **kwargs)\n    \n    async def complete_code(self, partial_code: str, **kwargs) -> str:\n        \"\"\"\n        代码补全\n        \n        Args:\n            partial_code: 不完整的代码\n            **kwargs: 其他参数\n        \n        Returns:\n            补全后的代码\n        \"\"\"\n        prompt = f\"请完成以下代码：\\n\\n```\\n{partial_code}\\n```\"\n        return await self.generate_code(prompt, **kwargs)\n    \n    async def optimize_code(self, code: str, **kwargs) -> str:\n        \"\"\"\n        代码优化\n        \n        Args:\n            code: 需要优化的代码\n            **kwargs: 其他参数\n        \n        Returns:\n            优化后的代码\n        \"\"\"\n        prompt = f\"请优化以下代码的性能和可读性：\\n\\n```\\n{code}\\n```\"\n        return await self.generate_code(prompt, **kwargs)\n    \n    async def translate_code(self, code: str, from_lang: str, to_lang: str, **kwargs) -> str:\n        \"\"\"\n        代码翻译\n        \n        Args:\n            code: 需要翻译的代码\n            from_lang: 源语言\n            to_lang: 目标语言\n            **kwargs: 其他参数\n        \n        Returns:\n            翻译后的代码\n        \"\"\"\n        prompt = f\"请将以下{from_lang}代码翻译为{to_lang}：\\n\\n```\\n{code}\\n```\"\n        return await self.generate_code(prompt, **kwargs)\n    \n    def _enhance_prompt(self, prompt: str, language: str) -> str:\n        \"\"\"\n        增强提示词\n        \n        Args:\n            prompt: 原始提示词\n            language: 编程语言\n        \n        Returns:\n            增强后的提示词\n        \"\"\"\n        enhanced = f\"\"\"Please generate clean, well-documented {language} code.\n\nRequirements:\n- Follow {language} best practices and conventions\n- Include meaningful variable names\n- Add comments for complex logic\n- Handle edge cases\n- Make the code production-ready\n\nUser request: {prompt}\n\nGenerate the code:\"\"\"\n        return enhanced\n    \n    async def _call_copilot_api(self, prompt: str, temperature: float, max_tokens: int) -> str:\n        \"\"\"\n        调用GitHub Copilot API\n        \n        Args:\n            prompt: 提示词\n            temperature: 温度参数\n            max_tokens: 最大令牌数\n        \n        Returns:\n            生成的代码\n        \"\"\"\n        if not self.github_token:\n            logger.warning(\"GitHub token not configured, using demo mode\")\n            return self._get_demo_code(prompt, \"python\")\n        \n        try:\n            headers = {\n                \"Authorization\": f\"token {self.github_token}\",\n                \"Accept\": \"application/vnd.github+json\",\n                \"Content-Type\": \"application/json\",\n            }\n            \n            # GitHub Copilot Chat Completions API 端点\n            # 注：实际使用需要订阅GitHub Copilot for Business或开启API访问\n            url = f\"{self.api_base}/copilot_internal/completions\"\n            \n            payload = {\n                \"prompt\": prompt,\n                \"max_tokens\": max_tokens,\n                \"temperature\": temperature,\n                \"top_p\": 1.0,\n                \"frequency_penalty\": 0.0,\n                \"presence_penalty\": 0.0,\n            }\n            \n            async with aiohttp.ClientSession() as session:\n                async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:\n                    if resp.status == 200:\n                        data = await resp.json()\n                        result = data.get('choices', [{}])[0].get('text', '')\n                        logger.info(\"Codex API call successful\")\n                        return result\n                    else:\n                        logger.warning(f\"Codex API returned status {resp.status}\")\n                        return self._get_demo_code(prompt, \"python\")\n        \n        except Exception as e:\n            logger.error(f\"Codex API call failed: {e}\")\n            return self._get_demo_code(prompt, \"python\")\n    \n    def _get_demo_code(self, prompt: str, language: str = \"python\") -> str:\n        \"\"\"\n        获取演示代码（当API不可用时使用）\n        \n        Args:\n            prompt: 提示词\n            language: 编程语言\n        \n        Returns:\n            演示代码\n        \"\"\"\n        demo_codes = {\n            \"python\": '''def quicksort(arr):\n    \"\"\"快速排序实现\"\"\"\n    if len(arr) <= 1:\n        return arr\n    \n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    \n    return quicksort(left) + middle + quicksort(right)\n\n# 测试\nif __name__ == \"__main__\":\n    arr = [3, 6, 8, 10, 1, 2, 1]\n    print(quicksort(arr))  # [1, 1, 2, 3, 6, 8, 10]\n''',\n            \"javascript\": '''function quickSort(arr) {\n    if (arr.length <= 1) return arr;\n    \n    const pivot = arr[Math.floor(arr.length / 2)];\n    const left = arr.filter(x => x < pivot);\n    const middle = arr.filter(x => x === pivot);\n    const right = arr.filter(x => x > pivot);\n    \n    return [...quickSort(left), ...middle, ...quickSort(right)];\n}\n\n// 测试\nconsole.log(quickSort([3, 6, 8, 10, 1, 2, 1]));\n''',\n            \"java\": '''public class QuickSort {\n    public static void quickSort(int[] arr, int low, int high) {\n        if (low < high) {\n            int pi = partition(arr, low, high);\n            quickSort(arr, low, pi - 1);\n            quickSort(arr, pi + 1, high);\n        }\n    }\n    \n    private static int partition(int[] arr, int low, int high) {\n        int pivot = arr[high];\n        int i = low - 1;\n        for (int j = low; j < high; j++) {\n            if (arr[j] < pivot) {\n                i++;\n                int temp = arr[i];\n                arr[i] = arr[j];\n                arr[j] = temp;\n            }\n        }\n        int temp = arr[i + 1];\n        arr[i + 1] = arr[high];\n        arr[high] = temp;\n        return i + 1;\n    }\n}\n'''\n        }\n        \n        code = demo_codes.get(language, demo_codes[\"python\"])\n        return f\"# Generated code based on: {prompt}\\n\\n{code}\"\n"
+"""GitHub Codex服务 - AI代码生成集成。"""
+
+import logging
+from typing import Any
+
+import aiohttp
+
+from src.config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+class CodexService:
+    """Codex代码生成服务。"""
+
+    def __init__(self) -> None:
+        self.github_token = settings.GITHUB_TOKEN
+        self.api_base = settings.CODEX_API_URL.rstrip("/")
+        self.model = settings.CODEX_MODEL
+        logger.info("CodexService initialized")
+
+    async def generate_code(self, prompt: str, language: str = "python", **kwargs: Any) -> str:
+        """根据提示词生成代码。"""
+        temperature = float(kwargs.get("temperature", 0.5))
+        max_tokens = int(kwargs.get("max_tokens", 2048))
+        enhanced_prompt = self._enhance_prompt(prompt, language)
+
+        try:
+            return await self._call_copilot_api(enhanced_prompt, language, temperature, max_tokens)
+        except Exception as exc:
+            logger.error("Failed to generate code: %s", exc)
+            return self._get_demo_code(prompt, language)
+
+    async def explain_code(self, code: str, language: str = "python", **kwargs: Any) -> str:
+        """解释代码。"""
+        prompt = f"请解释以下{language}代码：\n\n```{language}\n{code}\n```"
+        return await self.generate_code(prompt, language=language, **kwargs)
+
+    async def complete_code(self, partial_code: str, language: str = "python", **kwargs: Any) -> str:
+        """补全代码。"""
+        prompt = f"请补全以下{language}代码：\n\n```{language}\n{partial_code}\n```"
+        return await self.generate_code(prompt, language=language, **kwargs)
+
+    async def optimize_code(self, code: str, language: str = "python", **kwargs: Any) -> str:
+        """优化代码。"""
+        prompt = f"请优化以下{language}代码的性能和可读性：\n\n```{language}\n{code}\n```"
+        return await self.generate_code(prompt, language=language, **kwargs)
+
+    async def translate_code(
+        self,
+        code: str,
+        from_lang: str,
+        to_lang: str,
+        **kwargs: Any,
+    ) -> str:
+        """翻译代码。"""
+        prompt = f"请将以下{from_lang}代码翻译为{to_lang}：\n\n```{from_lang}\n{code}\n```"
+        return await self.generate_code(prompt, language=to_lang, **kwargs)
+
+    def _enhance_prompt(self, prompt: str, language: str) -> str:
+        """增强提示词。"""
+        return f"""Please generate clean, well-documented {language} code.
+
+Requirements:
+- Follow {language} best practices and conventions
+- Include meaningful variable names
+- Add comments for complex logic
+- Handle edge cases
+- Make the code production-ready
+
+User request: {prompt}
+
+Generate the code:"""
+
+    async def _call_copilot_api(
+        self,
+        prompt: str,
+        language: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """调用GitHub兼容接口；不可用时回退到演示模式。"""
+        if not self.github_token:
+            logger.warning("GitHub token not configured, using demo mode")
+            return self._get_demo_code(prompt, language)
+
+        url = f"{self.api_base}/copilot_internal/completions"
+        headers = {
+            "Authorization": f"token {self.github_token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "prompt": prompt,
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+        }
+
+        timeout = aiohttp.ClientTimeout(total=30)
+
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status != 200:
+                        logger.warning("Codex API returned status %s, using demo mode", response.status)
+                        return self._get_demo_code(prompt, language)
+
+                    data = await response.json(content_type=None)
+        except aiohttp.ClientError as exc:
+            logger.warning("Codex API request failed: %s", exc)
+            return self._get_demo_code(prompt, language)
+
+        choices = data.get("choices", [])
+        if choices:
+            text = choices[0].get("text", "").strip()
+            if text:
+                return text
+
+        logger.warning("Codex API response missing choices, using demo mode")
+        return self._get_demo_code(prompt, language)
+
+    def _get_demo_code(self, prompt: str, language: str = "python") -> str:
+        """当远程接口不可用时返回演示代码。"""
+        demo_codes = {
+            "python": """def quicksort(arr):
+    \"\"\"快速排序实现\"\"\"
+    if len(arr) <= 1:
+        return arr
+
+    pivot = arr[len(arr) // 2]
+    left = [x for x in arr if x < pivot]
+    middle = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+
+    return quicksort(left) + middle + quicksort(right)
+
+
+if __name__ == "__main__":
+    arr = [3, 6, 8, 10, 1, 2, 1]
+    print(quicksort(arr))
+""",
+            "javascript": """function quickSort(arr) {
+  if (arr.length <= 1) return arr;
+
+  const pivot = arr[Math.floor(arr.length / 2)];
+  const left = arr.filter((item) => item < pivot);
+  const middle = arr.filter((item) => item === pivot);
+  const right = arr.filter((item) => item > pivot);
+
+  return [...quickSort(left), ...middle, ...quickSort(right)];
+}
+
+console.log(quickSort([3, 6, 8, 10, 1, 2, 1]));
+""",
+            "java": """public class QuickSort {
+    public static void quickSort(int[] arr, int low, int high) {
+        if (low < high) {
+            int pi = partition(arr, low, high);
+            quickSort(arr, low, pi - 1);
+            quickSort(arr, pi + 1, high);
+        }
+    }
+
+    private static int partition(int[] arr, int low, int high) {
+        int pivot = arr[high];
+        int i = low - 1;
+
+        for (int j = low; j < high; j++) {
+            if (arr[j] < pivot) {
+                i++;
+                int temp = arr[i];
+                arr[i] = arr[j];
+                arr[j] = temp;
+            }
+        }
+
+        int temp = arr[i + 1];
+        arr[i + 1] = arr[high];
+        arr[high] = temp;
+        return i + 1;
+    }
+}
+""",
+        }
+
+        code = demo_codes.get(language.lower(), demo_codes["python"])
+        return f"# Generated code based on: {prompt}\n\n{code}"

@@ -23,7 +23,12 @@ class AgentConnectionManager:
         self.agent_info: Dict[str, Dict[str, Any]] = {}
         self.task_queue: Dict[str, list] = {}  # agent_id -> [tasks]
         self.pending_results: Dict[str, Dict[str, Any]] = {}  # task_id -> result
+        self.task_service: Optional[Any] = None
         logger.info("AgentConnectionManager initialized")
+
+    def bind_task_service(self, task_service: Any):
+        """绑定任务服务，用于同步远程任务状态。"""
+        self.task_service = task_service
     
     async def connect(self, websocket: WebSocket, agent_id: str):
         """
@@ -179,6 +184,13 @@ class AgentConnectionManager:
             task_id = message.get("task_id")
             status = message.get("status")
             logger.info(f"📊 Task {task_id} status: {status}")
+            if self.task_service is not None and task_id and status:
+                self.task_service.update_task_status(
+                    task_id,
+                    status,
+                    message=message.get("message", ""),
+                    agent_id=agent_id,
+                )
         
         elif msg_type == "task_result":
             # 任务结果
@@ -189,6 +201,13 @@ class AgentConnectionManager:
             
             # 保存结果
             self.pending_results[task_id] = message
+            if self.task_service is not None and task_id:
+                self.task_service.complete_remote_task(
+                    task_id,
+                    message.get("status", "completed"),
+                    result,
+                    agent_id=agent_id,
+                )
             
             # 推送结果给用户
             await self._push_result_to_user(user_id, source, task_id, result)

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class AgentStatus(str, Enum):
     """Agent状态"""
     IDLE = "idle"
+    QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"

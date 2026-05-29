@@ -1,11 +1,12 @@
 """Agent WebSocket API路由 - 连接本地Agent守护进程"""
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+import datetime
 import logging
-import json
 
-from src.daemon.connection_manager import agent_manager, AgentWebSocketHandler
-from src.api.exceptions import UnauthorizedException
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
+from src.config.settings import settings
+from src.daemon.connection_manager import AgentWebSocketHandler, agent_manager
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +221,7 @@ async def update_agent_config(agent_id: str, config: dict):
     config_msg = {
         "type": "config",
         "config": config,
-        "timestamp": __import__("datetime").datetime.now().isoformat()
+        "timestamp": datetime.datetime.now().isoformat()
     }
     
     success = await agent_manager.send_task(agent_id, config_msg)
@@ -249,11 +250,4 @@ def _verify_api_key(api_key: str) -> bool:
     Returns:
         是否验证通过
     """
-    # TODO: 实现真实的API密钥验证
-    # 可以从数据库或环境变量中获取有效的API密钥
-    valid_keys = [
-        "test-key",
-        "dev-key",
-        # 从配置中读取生产密钥
-    ]
-    return api_key in valid_keys
+    return api_key in settings.agent_api_keys
