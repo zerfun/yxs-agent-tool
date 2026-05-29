@@ -1,24 +1,29 @@
-"""微信API路由"""
+"""微信 API 路由。"""
 
-from fastapi import APIRouter, Request, Query, Depends
 import logging
 
-from src.models.schemas import APIResponse, MessageSource, TaskRequest, AIModel
-from src.services.wechat_service import WeChatService
-from src.services.agent_service import AgentService
+from fastapi import APIRouter, Depends, Query, Request, Response
+
 from src.api.exceptions import BadRequestException, ServerException
+from src.config.settings import settings
+from src.models.schemas import AIModel, MessageSource, TaskRequest
+from src.services.agent_service import AgentService
+from src.services.wechat_service import WeChatService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wechat", tags=["WeChat"])
 
+
 def get_wechat_service(request: Request) -> WeChatService:
-    """获取微信服务"""
+    """获取微信服务。"""
     return request.app.state.wechat_service
 
+
 def get_agent_service(request: Request) -> AgentService:
-    """获取Agent服务"""
+    """获取 Agent 服务。"""
     return request.app.state.agent_service
+
 
 @router.get("/callback")
 async def verify_wechat(
@@ -26,69 +31,113 @@ async def verify_wechat(
     timestamp: str = Query(...),
     nonce: str = Query(...),
     echostr: str = Query(...),
-    wechat_service: WeChatService = Depends(get_wechat_service)
+    wechat_service: WeChatService = Depends(get_wechat_service),
 ):
-    """微信服务器验证 (GET请求)"""
-    
+    """微信服务器验证。"""
     if wechat_service.verify_signature(signature, timestamp, nonce):
         return echostr
-    else:
-        raise BadRequestException("Invalid signature")
+    raise BadRequestException("Invalid signature")
+
 
 @router.post("/callback")
 async def handle_wechat_message(
     request: Request,
     wechat_service: WeChatService = Depends(get_wechat_service),
-    agent_service: AgentService = Depends(get_agent_service)
+    agent_service: AgentService = Depends(get_agent_service),
 ):
-    """处理微信消息 (POST请求)"""
-    
+    """处理微信消息。"""
     try:
-        # 获取消息体
-        data = await request.body()
-        data = data.decode('utf-8')
-        
-        # 解析消息
+        data = (await request.body()).decode("utf-8")
         message = wechat_service.parse_message(data)
-        
         if not message:
             raise BadRequestException("Invalid message format")
-        
-        # 检查消息类型
-        if message['msg_type'] != 'text':
-            # 对于非文本消息，返回提示
-            response_xml = wechat_service.create_response(
-                message['from_user'],
-                message['to_user'],
-                "暂只支持文本消息，请输入您的需求。"
+
+        if message["msg_type"] != "text":
+            return _xml_reply(
+                wechat_service,
+                message["from_user"],
+                message["to_user"],
+                "暂只支持文本消息，请输入您的需求。",
             )
-            return response_xml
-        
-        # 创建任务
+
+        command = wechat_service.parse_text_command(message["content"])
+        if command is not None:
+            response_content = await _handle_command(
+                command=command,
+                user_id=message["from_user"],
+                agent_service=agent_service,
+                wechat_service=wechat_service,
+            )
+            return _xml_reply(
+                wechat_service,
+                message["from_user"],
+                message["to_user"],
+                response_content,
+            )
+
         task_request = TaskRequest(
-            prompt=message['content'],
+            prompt=message["content"],
             model=AIModel.CODEX,
             temperature=0.5,
-            max_tokens=2048
+            max_tokens=2048,
         )
-        
         task_result = await agent_service.process_task(
             task_request,
-            user_id=message['from_user'],
-            source=MessageSource.WECHAT
+            user_id=message["from_user"],
+            source=MessageSource.WECHAT,
         )
-        
-        # 创建响应
-        response_content = task_result.result or f"错误: {task_result.error}"
-        response_xml = wechat_service.create_response(
-            message['from_user'],
-            message['to_user'],
-            response_content
+
+        logger.info("WeChat message processed successfully")
+        return _xml_reply(
+            wechat_service,
+            message["from_user"],
+            message["to_user"],
+            wechat_service.build_submission_message(task_result),
         )
-        
-        logger.info(f"WeChat message processed successfully")
-        return response_xml
-        
-    except Exception as e:
-        logger.error(f"Error handling WeChat message: {e}")
+    except Exception as exc:
+        logger.error("Error handling WeChat message: %s", exc)
         raise ServerException("Failed to process message")
+
+
+async def _handle_command(
+    command: dict[str, str],
+    user_id: str,
+    agent_service: AgentService,
+    wechat_service: WeChatService,
+) -> str:
+    """处理微信文本命令。"""
+    if command["type"] == "help":
+        return wechat_service.build_help_message()
+
+    if command["type"] == "recent_tasks":
+        tasks = await agent_service.list_tasks(
+            limit=settings.WECHAT_COMMAND_TASK_LIMIT,
+            user_id=user_id,
+        )
+        return wechat_service.build_task_list_message(tasks)
+
+    if command["type"] == "task_status":
+        task_id = command["task_id"]
+        task = await agent_service.get_task(task_id)
+        if task is None:
+            return f"未找到任务：{task_id}\n发送“最近任务”可查看近期记录。"
+
+        if task.user_id and task.user_id != user_id:
+            return "这个任务不属于当前微信用户，无法查看。"
+
+        return wechat_service.build_task_status_message(task)
+
+    return wechat_service.build_help_message()
+
+
+def _xml_reply(
+    wechat_service: WeChatService,
+    from_user: str,
+    to_user: str,
+    content: str,
+) -> Response:
+    """返回微信 XML 文本消息。"""
+    return Response(
+        content=wechat_service.create_response(from_user, to_user, content),
+        media_type="application/xml",
+    )

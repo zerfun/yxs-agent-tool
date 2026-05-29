@@ -105,6 +105,8 @@ python client.py --server ws://localhost:8000/api/v1/agent/ws --key test-key --n
 
 本地 Agent 在线时，创建任务接口会优先返回 `queued`，后续由守护进程通过 WebSocket 回传状态与结果。
 
+如果同时配置了 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`，远程任务完成后会尝试通过公众号客服消息主动推送给用户。
+
 ## 生产部署
 
 ### 1. 云服务器配置

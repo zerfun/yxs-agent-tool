@@ -111,7 +111,8 @@ WECHAT_TOKEN=your_token
 - 有在线本地 Agent 时，任务优先远程派发
 - 没有在线 Agent 时，Codex 请求会本地兜底到演示模式
 - 支持 `memory` / `redis` 两种任务存储后端，Redis 不可用时自动回退到内存
-- 微信回调路由与 Agent WebSocket 路由已接入主应用
+- 微信支持“帮助 / 最近任务 / 状态 <任务ID>”命令
+- 远程任务完成后，可通过公众号客服消息主动推送结果
 - 基础测试已覆盖本地执行和远程排队两条主路径
 
 ## 🔌 启动本地 Agent
@@ -133,6 +134,15 @@ python client.py --server ws://localhost:8000/api/v1/agent/ws --key test-key --n
          return arr
      ...
 ```
+
+### 微信命令
+```
+帮助
+最近任务
+状态 <任务ID>
+```
+
+当任务被分发到在线本地 Agent 时，微信会先同步回复任务已接收，后续再通过公众号客服消息主动推送最终结果。
 
 ## 🏗️ 架构设计
 

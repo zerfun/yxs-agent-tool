@@ -24,11 +24,16 @@ class AgentConnectionManager:
         self.task_queue: Dict[str, list] = {}  # agent_id -> [tasks]
         self.pending_results: Dict[str, Dict[str, Any]] = {}  # task_id -> result
         self.task_service: Optional[Any] = None
+        self.wechat_service: Optional[Any] = None
         logger.info("AgentConnectionManager initialized")
 
     def bind_task_service(self, task_service: Any):
         """绑定任务服务，用于同步远程任务状态。"""
         self.task_service = task_service
+
+    def bind_wechat_service(self, wechat_service: Any):
+        """绑定微信服务，用于异步结果回推。"""
+        self.wechat_service = wechat_service
     
     async def connect(self, websocket: WebSocket, agent_id: str):
         """
@@ -229,16 +234,31 @@ class AgentConnectionManager:
             result: 结果内容
         """
         if source == "wechat":
-            await self._push_to_wechat(user_id, result)
+            await self._push_to_wechat(user_id, task_id, result)
         elif source == "feishu":
             await self._push_to_feishu(user_id, result)
         elif source == "qq":
             await self._push_to_qq(user_id, result)
     
-    async def _push_to_wechat(self, user_id: str, result: str):
+    async def _push_to_wechat(self, user_id: str, task_id: str, result: str):
         """推送结果到微信"""
-        # TODO: 实现微信推送
-        logger.info(f"📱 Pushing to WeChat user {user_id}")
+        if not self.wechat_service:
+            logger.warning("WeChat push skipped: WeChatService not bound")
+            return
+
+        task = None
+        if self.task_service is not None:
+            task = await self.task_service.get_task(task_id)
+
+        pushed = await self.wechat_service.push_task_result(
+            user_id,
+            task_id,
+            task.status.value if task else "completed",
+            result,
+            task=task,
+        )
+        if not pushed:
+            logger.warning("WeChat push failed for user %s task %s", user_id, task_id)
     
     async def _push_to_feishu(self, user_id: str, result: str):
         """推送结果到飞书"""

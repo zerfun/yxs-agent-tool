@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     WECHAT_TOKEN: str = ""
     WECHAT_ENCODING_AES_KEY: str = ""
     ENABLE_WECHAT: bool = True
+    WECHAT_API_BASE: str = "https://api.weixin.qq.com"
+    WECHAT_RESULT_PUSH_MAX_LENGTH: int = 1500
+    WECHAT_COMMAND_TASK_LIMIT: int = 5
 
     # 飞书配置
     ENABLE_FEISHU: bool = False

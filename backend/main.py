@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
         )
         app.state.wechat_service = WeChatService()
         agent_manager.bind_task_service(app.state.agent_service)
+        agent_manager.bind_wechat_service(app.state.wechat_service)
         app.state.heartbeat_task = asyncio.create_task(start_heartbeat_task())
         logger.info("✅ 服务初始化完成")
         yield
