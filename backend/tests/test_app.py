@@ -14,6 +14,7 @@ def test_health_endpoint():
     payload = response.json()
     assert payload["code"] == 0
     assert payload["data"]["status"] == "healthy"
+    assert "task_store" in payload["data"]
 
 
 def test_create_task_endpoint():
@@ -64,3 +65,25 @@ def test_create_task_endpoint_can_return_queued_when_remote_agent_available():
     assert response.status_code == 200
     payload = response.json()
     assert payload["data"]["status"] == "queued"
+
+
+def test_list_tasks_endpoint_returns_recent_tasks():
+    """任务列表接口应返回最近任务。"""
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/v1/agent/task",
+            json={"prompt": "task one", "model": "claude"},
+        ).json()
+        second = client.post(
+            "/api/v1/agent/task",
+            json={"prompt": "task two", "model": "qwen"},
+        ).json()
+
+        response = client.get("/api/v1/agent/tasks?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["code"] == 0
+    assert payload["data"]["total"] == 2
+    task_ids = [task["task_id"] for task in payload["data"]["tasks"]]
+    assert task_ids == [second["data"]["task_id"], first["data"]["task_id"]]

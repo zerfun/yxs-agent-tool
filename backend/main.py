@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # 导入路由
 from src.api import agent_router, agent_ws_router, health_router, wechat_router
 from src.daemon.connection_manager import agent_manager, start_heartbeat_task
+from src.repositories.task_store import create_task_store
 from src.services.agent_service import AgentService
 from src.services.wechat_service import WeChatService
 
@@ -31,7 +32,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 研享数Agent工具启动中...")
 
     try:
-        app.state.agent_service = AgentService(connection_manager=agent_manager)
+        app.state.task_store = await create_task_store()
+        app.state.agent_service = AgentService(
+            connection_manager=agent_manager,
+            task_store=app.state.task_store,
+        )
         app.state.wechat_service = WeChatService()
         agent_manager.bind_task_service(app.state.agent_service)
         app.state.heartbeat_task = asyncio.create_task(start_heartbeat_task())
@@ -45,6 +50,10 @@ async def lifespan(app: FastAPI):
                 await heartbeat_task
             except asyncio.CancelledError:
                 logger.info("Heartbeat task cancelled")
+
+        task_store = getattr(app.state, "task_store", None)
+        if task_store is not None:
+            await task_store.close()
 
         logger.info("🛑 研享数Agent工具关闭中...")
 

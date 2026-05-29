@@ -42,10 +42,14 @@ class TaskResponse(BaseModel):
     """任务响应"""
     task_id: str
     status: AgentStatus
+    user_id: Optional[str] = None
+    model: Optional[AIModel] = None
+    source: Optional[MessageSource] = None
     result: Optional[str] = None
     error: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class Task(BaseModel):
     """任务模型"""

@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     LOCAL_LLM_URL: str = "http://localhost:11434/api/generate"
     LOCAL_LLM_MODEL: str = "llama2"
 
+    # 任务存储
+    TASK_STORE_BACKEND: str = "memory"
+    TASK_STORE_PREFIX: str = "yxs_agent"
+    TASK_STORE_MAX_ITEMS: int = 1000
+
     # 数据库
     DB_URL: str = "mongodb://localhost:27017"
     DB_NAME: str = "yxs_agent"

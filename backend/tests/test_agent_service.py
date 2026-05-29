@@ -2,6 +2,8 @@
 
 import pytest
 
+from src.models.schemas import Task
+from src.repositories.task_store import InMemoryTaskStore
 from src.models.schemas import AIModel, AgentStatus, MessageSource, TaskRequest
 from src.services.agent_service import AgentService
 
@@ -26,7 +28,7 @@ async def test_process_task_returns_demo_code_when_github_token_missing(monkeypa
     assert response.result is not None
     assert "quicksort" in response.result.lower()
 
-    stored_task = service.get_task(response.task_id)
+    stored_task = await service.get_task(response.task_id)
     assert stored_task is not None
     assert stored_task.status == AgentStatus.COMPLETED
 
@@ -67,23 +69,48 @@ async def test_process_task_queues_remote_agent_when_available():
     assert payload["type"] == "task"
 
 
-def test_complete_remote_task_updates_stored_result():
+@pytest.mark.asyncio
+async def test_complete_remote_task_updates_stored_result():
     """远程Agent返回结果后，任务状态应被更新。"""
     manager = FakeConnectionManager()
     service = AgentService(connection_manager=manager)
 
     task_id = "task-1"
-    service.tasks[task_id] = service.tasks.get(task_id) or __import__("src.models.schemas", fromlist=["Task"]).Task(
-        id=task_id,
-        user_id="remote-user",
-        prompt="hello",
-        model=AIModel.CODEX,
-        status=AgentStatus.QUEUED,
-        source=MessageSource.API,
+    await service.task_store.save(
+        Task(
+            id=task_id,
+            user_id="remote-user",
+            prompt="hello",
+            model=AIModel.CODEX,
+            status=AgentStatus.QUEUED,
+            source=MessageSource.API,
+        )
     )
 
-    response = service.complete_remote_task(task_id, "completed", "done", agent_id="agent-1")
+    response = await service.complete_remote_task(task_id, "completed", "done", agent_id="agent-1")
 
     assert response is not None
     assert response.status == AgentStatus.COMPLETED
     assert response.result == "done"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_returns_recent_first():
+    """任务列表应按创建时间倒序返回。"""
+    service = AgentService(task_store=InMemoryTaskStore())
+
+    first = await service.process_task(
+        TaskRequest(prompt="first", model=AIModel.CLAUDE),
+        user_id="user-a",
+        source=MessageSource.API,
+    )
+    second = await service.process_task(
+        TaskRequest(prompt="second", model=AIModel.QWEN),
+        user_id="user-a",
+        source=MessageSource.API,
+    )
+
+    tasks = await service.list_tasks(limit=10, user_id="user-a")
+
+    assert [task.task_id for task in tasks[:2]] == [second.task_id, first.task_id]
+    assert all(task.user_id == "user-a" for task in tasks)

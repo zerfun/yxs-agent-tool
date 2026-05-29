@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 import uuid
 
 from src.models.schemas import AIModel, AgentStatus, MessageSource, Task, TaskRequest, TaskResponse
+from src.repositories.task_store import BaseTaskStore, InMemoryTaskStore
 from src.services.codex_service import CodexService
 
 logger = logging.getLogger(__name__)
@@ -14,11 +15,15 @@ logger = logging.getLogger(__name__)
 class AgentService:
     """Agent服务"""
 
-    def __init__(self, connection_manager: Optional[Any] = None):
+    def __init__(
+        self,
+        connection_manager: Optional[Any] = None,
+        task_store: Optional[BaseTaskStore] = None,
+    ):
         """初始化Agent服务"""
-        self.tasks: Dict[str, Task] = {}  # 临时存储，实际应用应使用数据库
         self.codex_service = CodexService()
         self.connection_manager = connection_manager
+        self.task_store = task_store or InMemoryTaskStore()
         logger.info("AgentService initialized")
 
     async def process_task(self, request: TaskRequest, user_id: str, source: MessageSource) -> TaskResponse:
@@ -44,17 +49,19 @@ class AgentService:
             )
 
             # 保存任务
-            self.tasks[task_id] = task
+            await self.task_store.save(task)
 
             agent_id = await self._dispatch_to_remote_agent(task, request)
             if agent_id:
                 task.metadata["execution_mode"] = "remote"
                 task.metadata["agent_id"] = agent_id
+                await self.task_store.save(task)
                 logger.info("Task %s queued for remote agent %s", task_id, agent_id)
                 return self._build_response(task)
 
             task.status = AgentStatus.RUNNING
             task.metadata["execution_mode"] = "local"
+            await self.task_store.save(task)
 
             # 根据模型调用相应的API
             if request.model == AIModel.CODEX:
@@ -75,6 +82,7 @@ class AgentService:
             task.status = AgentStatus.COMPLETED
             task.result = result
             task.completed_at = datetime.now()
+            await self.task_store.save(task)
 
             logger.info("Task %s completed successfully", task_id)
 
@@ -83,14 +91,19 @@ class AgentService:
             logger.error("Task %s failed: %s", task_id, exc)
 
             # 更新任务状态为失败
-            if task_id in self.tasks:
-                self.tasks[task_id].status = AgentStatus.FAILED
-                self.tasks[task_id].error = str(exc)
-                self.tasks[task_id].completed_at = datetime.now()
+            failed_task = await self.task_store.get(task_id)
+            if failed_task is not None:
+                failed_task.status = AgentStatus.FAILED
+                failed_task.error = str(exc)
+                failed_task.completed_at = datetime.now()
+                await self.task_store.save(failed_task)
 
             return TaskResponse(
                 task_id=task_id,
                 status=AgentStatus.FAILED,
+                user_id=user_id,
+                model=request.model,
+                source=source,
                 error=str(exc),
                 created_at=created_at,
                 completed_at=datetime.now(),
@@ -121,12 +134,22 @@ class AgentService:
         logger.warning("Qwen API integration pending")
         return self._build_placeholder_response("Qwen", prompt, temperature, max_tokens)
 
-    def get_task(self, task_id: str) -> Optional[TaskResponse]:
+    async def get_task(self, task_id: str) -> Optional[TaskResponse]:
         """获取任务状态"""
-        task = self.tasks.get(task_id)
+        task = await self.task_store.get(task_id)
         return self._build_response(task) if task else None
 
-    def update_task_status(
+    async def list_tasks(
+        self,
+        limit: int = 20,
+        user_id: Optional[str] = None,
+        status: Optional[AgentStatus] = None,
+    ) -> list[TaskResponse]:
+        """列出最近任务。"""
+        tasks = await self.task_store.list(limit=limit, user_id=user_id, status=status)
+        return [self._build_response(task) for task in tasks]
+
+    async def update_task_status(
         self,
         task_id: str,
         status: str,
@@ -134,7 +157,7 @@ class AgentService:
         agent_id: Optional[str] = None,
     ) -> Optional[TaskResponse]:
         """更新远程任务状态。"""
-        task = self.tasks.get(task_id)
+        task = await self.task_store.get(task_id)
         if not task:
             return None
 
@@ -146,10 +169,11 @@ class AgentService:
             task.metadata["agent_id"] = agent_id
         if message:
             task.metadata["last_status_message"] = message
+        await self.task_store.save(task)
 
         return self._build_response(task)
 
-    def complete_remote_task(
+    async def complete_remote_task(
         self,
         task_id: str,
         status: str,
@@ -157,7 +181,7 @@ class AgentService:
         agent_id: Optional[str] = None,
     ) -> Optional[TaskResponse]:
         """写入远程Agent返回的最终结果。"""
-        task = self.tasks.get(task_id)
+        task = await self.task_store.get(task_id)
         if not task:
             return None
 
@@ -174,8 +198,14 @@ class AgentService:
         else:
             task.result = result
             task.error = None
+        await self.task_store.save(task)
 
         return self._build_response(task)
+
+    @property
+    def task_store_backend(self) -> str:
+        """当前任务存储后端名称。"""
+        return self.task_store.backend_name
 
     async def _dispatch_to_remote_agent(self, task: Task, request: TaskRequest) -> Optional[str]:
         """有在线Agent时优先走远程派发。"""
@@ -240,8 +270,12 @@ class AgentService:
         return TaskResponse(
             task_id=task.id,
             status=task.status,
+            user_id=task.user_id,
+            model=task.model,
+            source=task.source,
             result=task.result,
             error=task.error,
             created_at=task.created_at,
             completed_at=task.completed_at,
+            metadata=task.metadata,
         )

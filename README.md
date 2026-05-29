@@ -86,6 +86,15 @@ LOCAL_LLM_URL=http://localhost:11434/api/generate
 LOCAL_LLM_MODEL=llama2
 ```
 
+### 任务存储配置
+```bash
+# .env
+TASK_STORE_BACKEND=memory   # 可选: memory / redis
+TASK_STORE_PREFIX=yxs_agent
+TASK_STORE_MAX_ITEMS=1000
+REDIS_URL=redis://localhost:6379/0
+```
+
 ### 微信公众号配置
 ```bash
 # .env
@@ -98,8 +107,10 @@ WECHAT_TOKEN=your_token
 
 - FastAPI 服务可正常启动
 - `POST /api/v1/agent/task` 支持创建任务
+- `GET /api/v1/agent/tasks` 支持查看最近任务
 - 有在线本地 Agent 时，任务优先远程派发
 - 没有在线 Agent 时，Codex 请求会本地兜底到演示模式
+- 支持 `memory` / `redis` 两种任务存储后端，Redis 不可用时自动回退到内存
 - 微信回调路由与 Agent WebSocket 路由已接入主应用
 - 基础测试已覆盖本地执行和远程排队两条主路径
 
@@ -142,8 +153,9 @@ python client.py --server ws://localhost:8000/api/v1/agent/ws --key test-key --n
 - [x] 微信基础回调接入
 - [x] 本地 / 远程任务分发骨架
 - [x] 本地 Agent WebSocket 通道
+- [x] 可切换的任务存储层
 - [ ] 真实模型 API 适配
-- [ ] 持久化任务队列
+- [ ] 生产级持久化任务队列
 
 ### Phase 2: 增强功能
 - [ ] 多AI模型支持

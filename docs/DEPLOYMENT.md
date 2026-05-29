@@ -23,6 +23,13 @@ cp .env.example .env
 vim .env
 ```
 
+如果希望任务在服务重启后继续可查，建议把以下配置改为 Redis：
+
+```bash
+TASK_STORE_BACKEND=redis
+REDIS_URL=redis://localhost:6379/0
+```
+
 ### 2. Docker Compose启动（推荐）
 
 ```bash
@@ -69,6 +76,8 @@ python main.py
 curl http://localhost:8000/health
 ```
 
+健康检查会返回当前任务存储后端和在线 Agent 数量，方便确认服务是否运行在预期模式下。
+
 ### 创建测试任务
 
 ```bash
@@ -78,6 +87,12 @@ curl -X POST http://localhost:8000/api/v1/agent/task \
     "prompt": "写一个快速排序函数",
     "model": "codex"
   }'
+```
+
+### 查看最近任务
+
+```bash
+curl "http://localhost:8000/api/v1/agent/tasks?limit=10"
 ```
 
 ### 启动本地 Agent

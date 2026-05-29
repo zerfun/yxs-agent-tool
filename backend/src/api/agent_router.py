@@ -1,8 +1,8 @@
 """Agent API路由"""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
-from src.models.schemas import APIResponse, MessageSource, TaskRequest
+from src.models.schemas import APIResponse, AgentStatus, MessageSource, TaskRequest
 from src.services.agent_service import AgentService
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
@@ -40,7 +40,7 @@ async def get_task(
 ) -> APIResponse:
     """获取任务状态"""
 
-    result = agent_service.get_task(task_id)
+    result = await agent_service.get_task(task_id)
 
     if not result:
         return APIResponse(
@@ -53,4 +53,24 @@ async def get_task(
         code=0,
         message="Task retrieved successfully",
         data=result.model_dump(),
+    )
+
+
+@router.get("/tasks")
+async def list_tasks(
+    limit: int = Query(default=20, ge=1, le=100),
+    user_id: str | None = Query(default=None),
+    status: AgentStatus | None = Query(default=None),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> APIResponse:
+    """列出最近任务。"""
+    results = await agent_service.list_tasks(limit=limit, user_id=user_id, status=status)
+
+    return APIResponse(
+        code=0,
+        message="Tasks retrieved successfully",
+        data={
+            "total": len(results),
+            "tasks": [result.model_dump() for result in results],
+        },
     )

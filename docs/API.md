@@ -36,7 +36,9 @@ GET /health
   "code": 0,
   "message": "Health check passed",
   "data": {
-    "status": "healthy"
+    "status": "healthy",
+    "task_store": "memory",
+    "online_agents": 0
   }
 }
 ```
@@ -130,6 +132,47 @@ GET /agent/task/{task_id}
     "error": null,
     "created_at": "2024-01-01T00:00:00",
     "completed_at": "2024-01-01T00:00:10"
+  }
+}
+```
+
+### 列出最近任务
+
+按创建时间倒序返回最近任务。
+
+```http
+GET /agent/tasks?limit=20&user_id=default_user&status=completed
+```
+
+**查询参数:**
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| limit | integer | 返回数量，1-100 | 20 |
+| user_id | string | 按用户过滤 | 可选 |
+| status | string | 按状态过滤 | 可选 |
+
+**响应:**
+```json
+{
+  "code": 0,
+  "message": "Tasks retrieved successfully",
+  "data": {
+    "total": 2,
+    "tasks": [
+      {
+        "task_id": "task-2",
+        "status": "completed",
+        "user_id": "default_user",
+        "model": "qwen",
+        "source": "api",
+        "result": "...",
+        "error": null,
+        "created_at": "2024-01-01T00:00:20",
+        "completed_at": "2024-01-01T00:00:21",
+        "metadata": {}
+      }
+    ]
   }
 }
 ```

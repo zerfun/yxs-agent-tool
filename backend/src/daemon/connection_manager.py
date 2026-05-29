@@ -185,7 +185,7 @@ class AgentConnectionManager:
             status = message.get("status")
             logger.info(f"📊 Task {task_id} status: {status}")
             if self.task_service is not None and task_id and status:
-                self.task_service.update_task_status(
+                await self.task_service.update_task_status(
                     task_id,
                     status,
                     message=message.get("message", ""),
@@ -202,7 +202,7 @@ class AgentConnectionManager:
             # 保存结果
             self.pending_results[task_id] = message
             if self.task_service is not None and task_id:
-                self.task_service.complete_remote_task(
+                await self.task_service.complete_remote_task(
                     task_id,
                     message.get("status", "completed"),
                     result,
